@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Overlap Video Splitter</title>
+<style>
+:root{--bg:#eef1f4;--card:#fff;--ink:#14202b;--mute:#5d6b78;--line:#d5dce3;--accent:#0f6b5c;--over:#f2a93b;--bar:#bcd9d3}
+@media (prefers-color-scheme:dark){:root{--bg:#10171d;--card:#18222b;--ink:#e8eef3;--mute:#93a3b0;--line:#2b3a46;--accent:#4fc4ae;--over:#e0a040;--bar:#24574d}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif;padding:24px 16px}
+main{max-width:760px;margin:0 auto;display:grid;gap:16px}
+h1{font-size:1.6rem;margin:0}
+p.sub{margin:4px 0 0;color:var(--mute)}
+section{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:18px}
+label{display:block;font-weight:600;margin-bottom:4px}
+input[type=number]{width:100%;padding:10px;border:1px solid var(--line);border-radius:6px;background:transparent;color:inherit;font:inherit}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.drop{display:block;border:2px dashed var(--line);border-radius:8px;padding:28px;text-align:center;cursor:pointer;color:var(--mute)}
+.drop:hover,.drop.on{border-color:var(--accent);color:var(--ink)}
+.drop input{display:none}
+button{font:inherit;font-weight:600;padding:11px 18px;border:0;border-radius:6px;background:var(--accent);color:#fff;cursor:pointer}
+button:disabled{opacity:.5;cursor:not-allowed}
+:focus-visible{outline:3px solid var(--over);outline-offset:2px}
+.check{display:flex;gap:8px;align-items:flex-start;margin:12px 0;font-weight:400}
+.check input{margin-top:5px}
+.tl{margin-top:14px;display:grid;gap:4px}
+.seg{position:relative;height:16px;background:var(--line);border-radius:3px}
+.seg i{position:absolute;top:0;bottom:0;background:var(--bar);border-radius:3px}
+.seg b{position:absolute;top:0;bottom:0;background:var(--over)}
+.list{display:grid;gap:6px;margin:14px 0 0;padding:0;list-style:none}
+.list li{display:flex;justify-content:space-between;gap:8px;align-items:center;padding:8px 10px;border:1px solid var(--line);border-radius:6px;font-variant-numeric:tabular-nums}
+.list a{color:var(--accent);font-weight:600}
+progress{width:100%;height:10px;margin-top:12px}
+.note{color:var(--mute);font-size:.9rem}
+.err{color:#c0392b;font-weight:600}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Overlap Video Splitter</h1>
+    <p class="sub">Cut a long video into equal parts where each part starts a few seconds before the previous one ended. Runs in your browser; nothing is uploaded.</p>
+  </header>
+
+  <section>
+    <label class="drop" id="drop">
+      <span id="dropText">Choose a video or drop it here</span>
+      <input type="file" id="file" accept="video/*,.mkv">
+    </label>
+    <div id="info" class="note" hidden></div>
+  </section>
+
+  <section id="settings" hidden>
+    <div class="row">
+      <div><label for="interval">Part length (minutes)</label><input type="number" id="interval" value="5" min="0.1" step="0.5"></div>
+      <div><label for="overlap">Overlap (seconds)</label><input type="number" id="overlap" value="10" min="0" step="1"></div>
+    </div>
+    <label class="check"><input type="checkbox" id="precise"><span>Precise cuts (re-encodes, much slower). Off = fast copy, but cuts snap to the nearest earlier keyframe.</span></label>
+    <div id="plan"></div>
+    <div id="err" class="err" hidden></div>
+    <p><button id="go">Split video</button></p>
+    <progress id="bar" max="1" value="0" hidden></progress>
+    <div id="status" class="note"></div>
+    <ul class="list" id="out"></ul>
+  </section>
+</main>
+<script type="module" src="/src/main.js"></script>
+</body>
+</html>
