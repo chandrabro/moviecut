@@ -24,6 +24,54 @@ function plan(total, interval, overlap) {
   return parts;
 }
 
+
+// ---- Minimal ZIP writer (store only, no compression; video is already compressed) ----
+const CRC_TABLE = (() => {
+  const t = new Uint32Array(256);
+  for (let n = 0; n < 256; n++) {
+    let c = n;
+    for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+    t[n] = c >>> 0;
+  }
+  return t;
+})();
+function crc32(u8) {
+  let c = 0xffffffff;
+  for (let i = 0; i < u8.length; i++) c = CRC_TABLE[(c ^ u8[i]) & 0xff] ^ (c >>> 8);
+  return (c ^ 0xffffffff) >>> 0;
+}
+function buildZip(entries) {
+  const enc = new TextEncoder();
+  const d = new Date();
+  const time = (d.getHours() << 11) | (d.getMinutes() << 5) | (d.getSeconds() >> 1);
+  const date = ((d.getFullYear() - 1980) << 9) | ((d.getMonth() + 1) << 5) | d.getDate();
+  const chunks = [], central = [];
+  let offset = 0;
+  for (const e of entries) {
+    const name = enc.encode(e.name);
+    const lh = new DataView(new ArrayBuffer(30));
+    lh.setUint32(0, 0x04034b50, true); lh.setUint16(4, 20, true); lh.setUint16(6, 0x0800, true);
+    lh.setUint16(8, 0, true); lh.setUint16(10, time, true); lh.setUint16(12, date, true);
+    lh.setUint32(14, e.crc, true); lh.setUint32(18, e.size, true); lh.setUint32(22, e.size, true);
+    lh.setUint16(26, name.length, true); lh.setUint16(28, 0, true);
+    chunks.push(lh.buffer, name, e.blob);
+    const ch = new DataView(new ArrayBuffer(46));
+    ch.setUint32(0, 0x02014b50, true); ch.setUint16(4, 20, true); ch.setUint16(6, 20, true);
+    ch.setUint16(8, 0x0800, true); ch.setUint16(10, 0, true); ch.setUint16(12, time, true); ch.setUint16(14, date, true);
+    ch.setUint32(16, e.crc, true); ch.setUint32(20, e.size, true); ch.setUint32(24, e.size, true);
+    ch.setUint16(28, name.length, true); ch.setUint32(42, offset, true);
+    central.push(ch.buffer, name);
+    offset += 30 + name.length + e.size;
+  }
+  const cdSize = central.reduce((n, b) => n + (b.byteLength ?? b.length), 0);
+  const end = new DataView(new ArrayBuffer(22));
+  end.setUint32(0, 0x06054b50, true);
+  end.setUint16(8, entries.length, true); end.setUint16(10, entries.length, true);
+  end.setUint32(12, cdSize, true); end.setUint32(16, offset, true);
+  return new Blob([...chunks, ...central, end.buffer], { type: 'application/zip' });
+}
+let zipEntries = [], zipName = 'parts.zip';
+
 function readInputs() {
   const interval = parseFloat($('interval').value) * 60;
   const overlap = parseFloat($('overlap').value);
@@ -110,6 +158,8 @@ $('go').addEventListener('click', async () => {
   busy = true;
   $('go').disabled = true;
   $('out').innerHTML = '';
+  $('zip').hidden = true;
+  zipEntries = [];
   $('bar').hidden = false;
   $('bar').value = 0;
   try {
@@ -145,17 +195,21 @@ $('go').addEventListener('click', async () => {
       if (code !== 0) throw new Error(`Part ${i + 1} failed. Try "Precise cuts" for this file.`);
       const data = await ff.readFile(outName);
       await ff.deleteFile(outName);
-      const url = URL.createObjectURL(new Blob([data], { type: 'video/' + outExt }));
+      const blob = new Blob([data], { type: 'video/' + outExt });
+      const url = URL.createObjectURL(blob);
       const li = document.createElement('li');
       const dl = `${base}_part${i + 1}_${fmt(p.start, '-')}_to_${fmt(p.end, '-')}.${outExt}`;
       li.innerHTML = `<span>Part ${i + 1}: ${fmt(p.start)} – ${fmt(p.end)}</span>`;
       const a = document.createElement('a');
       a.href = url; a.download = dl; a.textContent = 'Download';
       li.appendChild(a);
+      zipEntries.push({ name: dl, blob, crc: crc32(data), size: data.length });
       $('out').appendChild(li);
     }
+    zipName = `${base}_parts.zip`;
+    $('zip').hidden = false;
     $('bar').value = 1;
-    $('status').textContent = 'Done. Download each part below.';
+    $('status').textContent = 'Done. Download each part below, or all at once as a ZIP.';
   } catch (e) {
     console.error(e);
     $('status').textContent = '';
@@ -165,4 +219,13 @@ $('go').addEventListener('click', async () => {
     busy = false;
     $('go').disabled = false;
   }
+});
+
+$('zip').addEventListener('click', () => {
+  if (!zipEntries.length) return;
+  const url = URL.createObjectURL(buildZip(zipEntries));
+  const a = document.createElement('a');
+  a.href = url; a.download = zipName;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
 });
